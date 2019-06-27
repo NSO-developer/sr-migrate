@@ -1,0 +1,159 @@
+module sr-migrate {
+
+  yang-version 1.1;
+  namespace "http://cisco.com/sr-migrate";
+  prefix sr-migrate;
+
+  import ietf-inet-types {
+    prefix inet;
+  }
+
+  import tailf-common {
+    prefix tailf;
+  }
+
+  import tailf-ncs {
+    prefix ncs;
+  }
+
+  include sr-migrate-test;
+  include sr-igp-domain;
+
+  description
+    "This module contains the sr-migrate service and associated models.
+     The sr-migrate service will migrate all routers in an igp-domain from
+     LDP to SR. This includes configuring a unique prefix-sid on each router
+     under the isis loopback interface. The igp-domain is defined in the
+     igp-domain submodule. The service includes a self-test action which
+     will test connectivity between all devices in the igp-domain. The
+     sr-migrate-test submodule contains the models for the test results.";
+
+  revision 2019-06-24 {
+    description
+      "Initial revision.";
+  }
+
+  identity router-migration {
+    base ncs:plan-component-type;
+  }
+
+  identity segment-routing-enabled {
+    base ncs:plan-state;
+  }
+
+  identity connectivity-test {
+    base ncs:plan-state;
+  }
+
+  identity sr-imposition-preferred {
+    base ncs:plan-state;
+  }
+
+  identity label-imposition-test {
+    base ncs:plan-state;
+  }
+
+  identity ldp-disabled {
+    base ncs:plan-state;
+  }
+
+  augment /ncs:services {
+    list sr-migrate {
+      key igp-domain;
+        tailf:info
+          "List of segment routing migration services. Each service
+           migrates all devices in an IGP domain from LDP to SR.";
+
+      uses ncs:plan-data;
+      uses ncs:service-data;
+      ncs:servicepoint sr-migrate;
+
+      leaf igp-domain {
+        tailf:info
+          "The IGP domain to migrate. All routers in the domain will be
+           migrated. The domain can contain a mix of NETCONF and CLI devices.";
+        type leafref {
+          path "/sr-migrate:igp-domain/name";
+        }
+      }
+
+      leaf enable-segment-routing {
+        tailf:info "Configure SR and TI-LFA on all routers in the IGP domain";
+        type boolean;
+      }
+
+      leaf prefer-sr-imposition {
+        tailf:info
+          "Prefer SR label imposition on all routers in the IGP domain";
+        when "../enable-segment-routing = 'true'";
+        type boolean;
+      }
+
+      leaf disable-ldp {
+        tailf:info
+          "Remove all LDP interfaces connecting devices in the IGP domain";
+        when "../prefer-sr-imposition = 'true' and " +
+             "../enable-segment-routing = 'true'";
+        type boolean;
+      }
+
+      container connectivity-test-results {
+        tailf:info "Detailed connectivity test results for the last self-test";
+        config false;
+        tailf:cdb-oper  {
+          tailf:persistent true;
+        }
+        uses test-results-grouping;
+      }
+
+      container label-imposition-test-results {
+        tailf:info
+          "Detailed connectivity test results (including CEF tests)
+           for the last self self";
+        config false;
+        tailf:cdb-oper  {
+          tailf:persistent true;
+        }
+        uses test-results-grouping;
+      }
+
+      tailf:action self-test {
+        tailf:info "Test connectivity between all devices in the IGP domain";
+        tailf:actionpoint sr-migrate-test;
+        input {
+          leaf multi-thread {
+            tailf:info "Test each router in parallel";
+            type boolean;
+            default false;
+          }
+
+          leaf check-frr-sids-are-protected {
+            tailf:info
+              "Fail if FRR adjacency sids are not protected";
+            type boolean;
+            default true;
+          }
+
+          leaf include-cef-tests {
+            tailf:info
+              "Include CEF tests (for testing SR label imposition)";
+            type boolean;
+            default false;
+          }
+
+          leaf include-ping-tests {
+            tailf:info "Include ping tests (this can be slow)";
+            type boolean;
+            default true;
+          }
+        }
+
+        output {
+          leaf success {
+            type boolean;
+          }
+        }
+      }
+    }
+  }
+}

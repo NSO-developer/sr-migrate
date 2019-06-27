@@ -1,0 +1,223 @@
+submodule sr-migrate-test {
+
+  yang-version 1.1;
+  belongs-to sr-migrate {
+    prefix sr-migrate;
+  }
+
+  import ietf-inet-types {
+    prefix inet;
+  }
+
+  import ietf-yang-types {
+    prefix ietf;
+  }
+
+  import tailf-ncs {
+    prefix ncs;
+  }
+
+  import tailf-common {
+    prefix tailf;
+  }
+
+  description
+    "This submodule contains the operational models for the self-test
+     results. The self-test is a connectivity test between all routers in the
+     igp-domain. For each router, various checks are made to every other
+     router in the igp-domain.";
+
+  revision 2019-06-24 {
+    description
+      "Initial revision.";
+  }
+
+  typedef test-result {
+    type enumeration {
+      enum 'PASS';
+      enum 'FAIL';
+      enum 'ERROR';
+    }
+  }
+
+  typedef sid {
+    type uint32 {
+      range "16000..1048575";
+    }
+  }
+
+  identity router-test {
+    base ncs:plan-component-type;
+  }
+
+  identity destination-test {
+    base ncs:plan-component-type;
+  }
+
+  identity adjacency-sids-validation {
+    base ncs:plan-state;
+  }
+
+  identity prefix-sid-validation {
+    base ncs:plan-state;
+  }
+
+  identity cef-validation {
+    base ncs:plan-state;
+  }
+
+  identity ping-test {
+    base ncs:plan-state;
+  }
+
+  grouping test-results-grouping {
+    leaf date-and-time {
+      type ietf:date-and-time;
+    }
+
+    uses ncs:plan-data;
+
+    list router {
+      tailf:info "List of all routers in the igp-domain";
+      key device-name;
+
+      leaf device-name {
+        type leafref {
+           path "/ncs:devices/ncs:device/ncs:name";
+        }
+      }
+
+      list destination-router {
+        tailf:info "List of every other routers in the igp-domain";
+        key device-name;
+
+        leaf device-name {
+          type leafref {
+             path "/ncs:devices/ncs:device/ncs:name";
+          }
+        }
+
+        leaf system-id {
+          tailf:info "Device hostname";
+          type string;
+        }
+
+        leaf prefix {
+          tailf:info "Loopback interface prefix";
+          type inet:ipv4-address;
+        }
+
+        leaf prefix-sid {
+          tailf:info "Loopback isis interface prefix-sid";
+          type sid;
+        }
+
+        leaf is-neighbour {
+          tailf:info "Device is in the isis instance neighors list";
+          type boolean;
+          description "show isis instance %s neighbors";
+        }
+
+        container adjacency-sids-test-details {
+          leaf has-adjacency-sids {
+            type boolean;
+          }
+
+          list adjacency-sids {
+            key sid;
+            description
+              "show isis adjacency systemid %s detail";
+
+            leaf sid {
+              type sid;
+            }
+
+            leaf is-protected {
+              type boolean;
+            }
+
+            leaf interface {
+              type string;
+            }
+
+            leaf mpls-forwarding-entry-valid {
+              type boolean;
+              description
+                "show mpls forwarding labels %s
+                 Check there is an entry in the MPLS forwarding labels table
+                 and that it meets the following criteria:
+                    Outgoing Label      = Pop
+                    Prefix or ID        = SR Adj
+                    Outgoing interfaces = Adjacency SID interface (above)";
+            }
+          }
+        }
+
+        leaf adjacency-sids-test-result {
+          type test-result;
+        }
+
+        container prefix-sid-test-details {
+
+          leaf has-prefix-sid {
+            type boolean;
+            description
+              "show isis segment-routing label table";
+          }
+
+          leaf mpls-forwarding-entry-valid {
+            type boolean;
+            description
+              "show mpls forwarding labels %s
+               Check there is an entry in the MPLS forwarding labels table
+               and that it meets the following criteria:
+                  Outgoing Label      != Unlabelled
+                  Prefix or ID        = SR Pfx";
+          }
+        }
+
+        leaf prefix-sid-test-result {
+          type test-result;
+        }
+
+        container cef-test-details {
+
+          leaf has-prefix-sid-label {
+            type boolean;
+            description
+              "show cef %s
+              Check local label = prefix-sid";
+          }
+
+          leaf has-label-imposition {
+            type boolean;
+            description
+              "Check labels imposed is not None";
+            }
+        }
+
+        leaf cef-test-result {
+          type test-result;
+        }
+
+        leaf ping-test-result {
+          type test-result;
+          description
+            "ping sr-mpls %s/32 fec-type igp isis";
+        }
+
+        leaf destination-test-result {
+          type test-result;
+        }
+      }
+
+      leaf router-test-result {
+        type test-result;
+      }
+    }
+
+    leaf self-test-result {
+      type test-result;
+    }
+  }
+}

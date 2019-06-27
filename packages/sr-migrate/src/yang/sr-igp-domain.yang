@@ -1,0 +1,132 @@
+submodule sr-igp-domain {
+
+  yang-version 1.1;
+  belongs-to sr-migrate {
+    prefix sr-migrate;
+  }
+
+  import tailf-common {
+    prefix tailf;
+  }
+
+  import tailf-ncs {
+    prefix ncs;
+  }
+
+  import resource-allocator {
+    prefix ralloc;
+  }
+
+  import id-allocator {
+    prefix idalloc;
+  }
+
+  include sr-migrate-test;
+
+  description
+    "This submodule contains the igp-domain model (which is used by the
+     sr-migrate service). Each igp-domain contains the list of routers
+     in the domain. This can be a mix of NETCONF and CLI devices";
+
+  revision 2019-06-24 {
+    description
+      "Initial revision.";
+  }
+
+  container sr-infrastructure {
+    tailf:info "Global segment routing infrastructure configuration";
+    container srgb {
+      tailf:info
+        "Segement Routing Global Block. These bounds are used to
+         configure the SRGB on each router";
+      leaf lower-bound {
+        type sid;
+        default 16001;
+      }
+
+      leaf upper-bound {
+        type sid;
+        default 23999;
+      }
+    }
+  }
+
+  list igp-domain {
+    tailf:info
+      "List of IGP domains. Intended to be used by the sr-migrate service";
+    key name;
+
+    leaf name {
+      tailf:info "The ISIS instance name";
+      type string;
+    }
+
+    leaf sid-pool {
+      tailf:info
+        "The NSO resource-manager SID pool to allocate prefix-sids from.
+         The pool bounds are internal to NSO; the bounds from the
+         sr-infrastructure/srgb container are configured on each device";
+      type leafref {
+        path "/ralloc:resource-pools/idalloc:id-pool/idalloc:name";
+      }
+      mandatory true;
+    }
+
+    leaf loopback {
+      tailf:info
+        "The loopback interface number. The same loopback interface will
+         be configured on each device";
+      type uint8;
+      default 0;
+    }
+
+    leaf address-family {
+      tailf:info "The interface address family used for configuring TI-LFA";
+      type enumeration {
+        enum ipv4;
+        enum ipv6;
+      }
+      default ipv4;
+    }
+
+    list router {
+      tailf:info
+        "List of routers in the IGP domain. This can contain both NETCONF
+         and CLI devices.";
+      key name;
+
+      leaf name {
+        type leafref {
+          path "/ncs:devices/ncs:device/ncs:name";
+        }
+      }
+
+      leaf custom-prefix-sid {
+        tailf:info
+          "Request a specific prefix-sid for this router is allocated from
+           the sid-pool";
+        type sid;
+      }
+
+      leaf prefix-sid {
+        tailf:info "The allocated prefix-sid";
+        type sid;
+        config false;
+        tailf:cdb-oper {
+          tailf:persistent true;
+        }
+      }
+    }
+
+    leaf-list sr-migrate-test-request {
+      tailf:info
+        "Used internally by the sr-migrate service to automatically
+         request a connectivity test";
+      tailf:hidden true;
+      type enumeration {
+        enum connectivity-test;
+        enum label-imposition-test;
+      }
+    }
+  }
+}

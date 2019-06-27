@@ -1,0 +1,12 @@
+storedstate
+ncs-cdb
+ncs.conf
+netsim
+README.ncs
+packages/cisco-iosxr-cli
+load-dir
+shared-jar
+build
+namespaces
+ncsc-out
+*.pyc

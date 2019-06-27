@@ -1,0 +1,50 @@
+<config-template xmlns="http://tail-f.com/ns/config/1.0">
+  <devices xmlns="http://tail-f.com/ns/ncs">
+    <device>
+      <name>{name}</name>
+      <config>
+
+        <!-- NETCONF -->
+        <isis xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-clns-isis-cfg">
+          <instances>
+            <instance>
+              <instance-name>{../name}</instance-name>
+              <afs>
+                <af>
+                  <af-name>{address-family}</af-name>
+                  <saf-name>unicast</saf-name>
+                  <af-data>
+                    <segment-routing>
+                      <mpls>segment-routing</mpls>
+                    </segment-routing>
+                  </af-data>
+                </af>
+              </afs>
+            </instance>
+          </instances>
+        </isis>
+
+        <!-- CLI -->
+        <router xmlns="http://tail-f.com/ned/cisco-ios-xr">
+          <isis>
+            <tag>
+              <name>{../name}</name>
+              <address-family>
+                <ipv4>
+                  <unicast>
+                    <segment-routing>
+                      <mpls>
+                        <sr-prefer/>
+                      </mpls>
+                    </segment-routing>
+                  </unicast>
+                </ipv4>
+              </address-family>
+            </tag>
+          </isis>
+        </router>
+
+      </config>
+    </device>
+  </devices>
+</config-template>
