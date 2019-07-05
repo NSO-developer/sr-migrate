@@ -1,16 +1,18 @@
 # Migrating to Segment Routing using NSO
-
 This demo shows how NSO can be used to safely automate the process of migrating
 an IGP domain from LDP to SR. To do this, NSO will run a series of operational
-tests on the routers in the IGP domain to confirm connectivity at each stage
-of the migration process.
+tests on the routers in the IGP domain to confirm connectivity at each stage of
+the migration process.
 
 **The demo only supports IOS XR devices running ISIS.**
 
+**The demo only supports migration of all devices in the IGP domain.**
+
 ## The migration process
-Segment Routing and LDP can coexist together and by default LDP is preferred
-over SR. Therefore NSO can provision the initial SR configuration without
-breaking the existing LDP connectivity.
+Segment Routing and LDP can coexist together and when a given destination can
+be reached by both SR and LDP transport paths, the LDP transport path is
+preferred by default. Therefore NSO can provision the initial SR configuration
+without breaking the existing LDP connectivity.
 
 ### Step 1: Enable segment routing
 Initially, NSO will configure each router in the IGP domain to enable segment
@@ -18,23 +20,30 @@ routing. The configuration includes:
 
 - The Segment Routing Global Block (SRGB).
 - A unique prefix SID on the loopback interface.
-- TI-LFA enabled on all router interfaces.
+- TI-LFA enabled on all non-loopback router interfaces.
 
 After the configuration has been applied, NSO will run a series of connectivity
-tests. For each router in the IGP domain, connectivity to every other router
-in the domain is validated as follows:
+tests. For each router *R* in the IGP domain, connectivity to every other
+router *D* in the domain is validated as follows:
 
-1. **Adjacency SID validation.** If the router is in the neighbours list, the
-adjacency SIDs are checked. For each adjacency SID, the corresponding MPLS
-forwarding labels are validated. The outgoing label and outgoing interface
-must be correct. For FRR adjacency SIDs, these must be protected (see
-connectivity test notes below).
+1. **Adjacency SID validation.** If the router *D* is in the neighbours list of
+   *R*, the adjacency SIDs are checked using the command `show isis adjacency
+   systemid <host-name> detail`. For each adjacency SID, the
+   corresponding MPLS forwarding label entries are validated using the command
+   `show mpls forwarding labels <adjacency SID label>`. The outgoing label and
+   outgoing interface must be correct. For protected adjacency SIDs, these must
+   actually be protected (see connectivity test notes below).
 
 2. **Prefix SID validation.** Next, the ISIS segment routing labels are checked
-to ensure the prefix SID has been learnt. The corresponding MPLS forwarding
-labels must also be valid.
+   using the command `show isis segment-routing label table`. This confirms
+   that the prefix SID of router *D* has been learnt by router *R*  The
+   corresponding MPLS forwarding label entries must also be valid.  This is
+   verified using the command `show mpls forwarding labels <prefix SID label>`.
 
-3. **Ping test.**  Finally, an sr-mpls ping test is executed.
+3. **Ping test.**  Finally, an SR MPLS ping test is executed from router *R* to
+   router *D*. The command `ping sr-mpls <node prefix> fec-type igp` executed
+   on router *R* validates the SR transport path to router *D* even if this
+   path is not yet used for service transport.
 
 ### Step 2: Prefer SR label imposition
 Only if all the previous tests succeed, NSO will now configure each router in
@@ -43,32 +52,32 @@ the IGP domain to prefer SR over LDP.
 NSO will then re-test the connectivity between all the routers in the domain.
 
 4. **CEF validation.** In addition to re-running the previous tests, NSO will
-check the prefix SID entry in the Forwarding Information Base to ensure the
-SR label is imposed.
+   check the prefix SID entry in the Forwarding Information Base (FIB) to
+   ensure the SR label is imposed. The command `show cef <node prefix>` is used
+   to verify this.
 
 ### Step 3: Disable LDP
-If all of the previous tests have passed, LDP can safely be disabled.
-NSO will remove all the LDP interfaces for connections between the routers in
-the IGP domain.
+If all of the previous tests have passed, LDP can safely be disabled.  NSO will
+remove all the LDP interfaces for connections between the routers in the IGP
+domain.
 
-
-## Getting Started
+## Getting started
 The demo can configure the routers in the IGP domain through either the NETCONF
 or CLI interfaces. However, currently **the operational tests are only
 supported using the CLI interface**.
 
 ### Pre-requisites
-The NETCONF NED is included in this repository, but the CLI NED is not,
-and **must be copied to the packages directory before starting the demo**.
-The CLI NED package directory name must be **cisco-iosxr-cli**.
+The NETCONF NED is included in this repository, but the CLI NED is not, and
+**must be copied to the packages directory before starting the demo**.  The CLI
+NED package directory name must be **cisco-iosxr-cli**.
 
 **The demo will fail to compile and will not work without the CLI NED.**
 
 ### Compiling the demo
-The packages can be compiled individually and copied to an existing NSO
-working directory. Or the supplied Makefile can be used to automatically
-compile the packages and set up the NSO directory. To do this, change to demo
-directory and run the `all` make target:
+The packages can be compiled individually and copied to an existing NSO working
+directory. Or the supplied Makefile can be used to automatically compile the
+packages and set up the NSO directory. To do this, change to demo directory and
+run the `all` make target:
 
     > cd ~/sr-migrate
     > make all
@@ -85,20 +94,25 @@ Once NSO has started, synchronise the devices.
 
 ### Running with real devices
 If using real devices, NSO should be started directly rather than using the
-`start` make target (which would start NETSIM too). Once NSO has started,
-real devices can be added and synced in the usual manner.
+`start` make target (which would start NETSIM too). Once NSO has started, real
+devices can be added and synced in the usual manner.
 
-#### Important - CLI devices
-To run all the operational tests, **a CLI device must exist in
-NSO for each router in the IGP domain**. A NETCONF version of the device can
-also be added so the SR configuration is done through the NETCONF interface.
+#### Important - CLI device
+The demo will both configure and test the routers in the IGP domain. The
+configuration can be generated for NETCONF and CLI devices, however the
+operational tests will only execute on CLI devices. To allow NETCONF devices
+to be tested, NSO will automatically look for a corresponding CLI device in the
+device list to run the operational tests. Therefore it is recommended that **a
+CLI device is added to the NSO device list for each router in the IGP domain**.
 
-In this case, when adding both a NETCONF and CLI version of the same router,
-the CLI device is only used for executing the operational commands and should
-be southbound locked. If there is no corresponding CLI device in NSO, the
-operational tests for that router won't be executed. The two devices must have
+**Note:** This implies a maximum of two devices in NSO per router (referencing
+the same IP address), one CLI, and one NETCONF. The two devices must have
 different names, these can be anything, they are matched on the IP address.
 
+When using a NETCONF device for the configuration, the corresponding CLI device
+is only used for executing the operational commands, and can be southbound
+locked in NSO. If there is no corresponding CLI device in NSO, the operational
+tests for that router won't be executed.
 
 ## Demo set-up
 The following steps describe the initial configuration required for the demo.
@@ -114,27 +128,28 @@ be changed by updating the bounds in `/sr-migrate:sr-infrastructure/srgb`:
 
 ### SID pool
 An internal resource-manager id-pool needs to be configured, which the demo
-will use to allocate the prefix SIDs from. This does not need to match the
-full SRGB, but should be in the SRGB range:
+will use to allocate the prefix SIDs from. This does not need to match the full
+SRGB, but should be in the SRGB range:
 
     set resource-pools id-pool pool-1 range start 17000 end 17500
 
 ### IGP domain
-The IGP domain needs to be created in NSO. This contains the list of routers
-in the domain. **The name of the domain must be the ISIS instance name.**
-The following parameters should be checked / updated:
+The IGP domain needs to be created in NSO. This contains the list of routers in
+the domain. **The name of the domain must be the ISIS instance name.** The
+following parameters should be checked / updated:
 
 **Mandatory**:
 - `sid-pool` This should be set to the id-pool created in the previous step.
   For each router in the domain, a prefix SID will be allocated from this pool.
 
-- `router` This is the router list. All routers in the IGP domain should
-  be added to this list (these devices need to have been previously added to
-  NSO's device list and synced). A mix of NETCONF and CLI devices can be added.
+- `router` This is the router list. All routers in the IGP domain should be
+  added to this list (these devices need to have been previously added to NSO's
+  device list and synced). A mix of NETCONF and CLI devices can be added.
 
-  As noted above, for NETCONF devices, the demo will automatically look for
-  the corresponding CLI device in NSO's device list to run the operational
-  tests (**don't add both devices to this sr-migrate router list**).
+  As noted above, for NETCONF devices, the demo will automatically look for the
+  corresponding CLI device in NSO's device list to run the operational tests.
+  **For each router in the IGP domain, there should be precisely one device
+  (either NETCONF or CLI) in the sr-migrate router list**
 
   For each router, a `custom-prefix-sid` can be requested. If this is not
   specified, a SID is automatically allocated from the SID pool.
@@ -143,43 +158,48 @@ The following parameters should be checked / updated:
         admin@ncs% edit igp-domain 1
         admin@ncs% set sid-pool pool-1
         admin@ncs% set router cli-p0
-        admin@ncs% set router netconf-p1 custom-prefix-sid 17001
+        admin@ncs% set router netconf-p1 custom-prefix-sid 17002
         admin@ncs% commit
 
 **Optional**:
-- `loopback` This is the loopback interface number where the prefix SID
-  will be configured on each router in the domain (the default is 0).
+- `loopback` This is the loopback interface number where the prefix SID will be
+  configured on each router in the domain (the default is 0).
 
-- `address-family` This is used for the TI-LFA configuration on each
-  interface (the default is ipv4).
+- `address-family` This is used for the SR MPLS configuration, prefix SID
+  configuration on the loopback interface, and TI-LFA configuration on each
+  non-loopback interface (the default is ipv4).
 
 
 ## Migrating the IGP domain
 The migration is done by the `sr-migrate` service. The service should be
 created using the NSO Web UI so the plan viewer can be shown. This is used to
 track the progress of the migration for each router in the domain. A separate
-plan viewer is also used to show the results of the connectivity tests as
-they execute.
+plan is also used to show the results of the connectivity tests as they
+execute.
+
+**Note:** To display the plan viewer in the NSO Web UI, untick the *hide
+operational data* checkbox in the *View options* menu, and select the *include
+subfolders* toggle button.
 
 The three migration steps (outlined above) are controlled using corresponding
-`enable-segment-routing`, `prefer-sr-imposition` and `disable-ldp` leafs in
-the `sr-migrate` service. Each of these can be set invididually so the
-configuration generated by NSO at each stage can be previewed using the
-dry-run feature. Or all three can be set at once and NSO will automatically
-step through the entire process with no manual intervention required.
+`enable-segment-routing`, `prefer-sr-imposition` and `disable-ldp` leafs in the
+`sr-migrate` service. Each of these can be set individually so the
+configuration generated by NSO at each stage can be previewed using the dry-run
+feature. Or all three can be set at once and NSO will automatically step
+through the entire process with no manual intervention required.
 
-1. Create the `sr-migrate` service. Choose the igp-domain to migrate (created
+### Recommended demo flow
+1. Create the `sr-migrate` service. Choose the `igp-domain` to migrate (created
    previously).
 
 2. It is recommended to commit at this point (navigate to the Commit Manager
    and press the *Commit* button). NSO will now allocate the prefix SIDs for
    the IGP domain routers, and create the initial plan view.  Navigate to the
-   igp-domain in the Configuration Editor to see the allocated SIDs.
+   `igp-domain` in the Configuration Editor to see the allocated SIDs.
 
    Click on the `sr-migrate` service in the Service Manager to see the plan
-   viewer (make sure *hide operational data* is unticked in the *View
-   options* menu, and that the *include subfolders* toggle button is
-   selected).
+   viewer (make sure *hide operational data* is unticked in the *View options*
+   menu, and that the *include subfolders* toggle button is selected).
 
    The plan viewer for the connectivity tests will be updated as the tests
    execute, so to monitor these easily, the `connectivity-test-results` and
@@ -194,12 +214,12 @@ step through the entire process with no manual intervention required.
    Once the commit is complete, switch to the `connectivity-test-results` tab
    to see the plan viewer update as the connectivity tests are executed.
 
-   Once the tests are complete, switch back to the service to see the
-   migration plan update.
+   Once the tests are complete, switch back to the service to see the migration
+   plan update.
 
-5. Next, NSO needs to configure the sr-prefer option on each router in the
-   IGP domain. Repeat step 3, this time setting the `prefer-sr-imposition` leaf
-   to true, and looking at the `label-imposition-test-results` tab.
+5. Next, NSO needs to configure the sr-prefer option on each router in the IGP
+   domain. Repeat step 3, this time setting the `prefer-sr-imposition` leaf to
+   true, and looking at the `label-imposition-test-results` tab.
 
 6. Finally, once all the tests have completed, set the `disable-ldp` leaf to
    true. Switch to the Commit Manager to view and commit the configuration.
@@ -213,26 +233,26 @@ list for each router in IGP domain.
 
 The tests can be re-ran by invoking the `self-test` action on the service
 (untick the *hide actions* option from the *View options* menu if executing
-from the Web UI). When executing the test manually, the following inputs
-can be set:
+from the Web UI). When executing the test manually, the following inputs can be
+set:
 
-- `multi-thread` This will test each router in parallel. This means the
-  tests will execute much faster. The default is false to give time to
-  switch to the test plan viewer to see the tests execute before they all
-  complete.
+- `multi-thread` This will test each router in parallel. This means the tests
+  will execute much faster. The default is false to give time to switch to the
+  test plan viewer to see the tests execute before they all complete.
 
 - `check-frr-sids-are-protected` The default is true and will cause the
-  adjacency SIDs test to fail if the FRR SIDs are not marked as protected.
-  The TI-LFA configuration is applied to all interfaces so they should always
-  be protected.
+  adjacency SIDs test to fail if the protected adjacency SIDs are not actually
+  protected. The TI-LFA configuration is applied to all interfaces so they
+  should always be protected.
 
 - `include-cef-tests` If set to true, the CEF tests will be included and the
   results will be written to the `label-imposition-test-results` container.
   Otherwise, the CEF tests are omitted and the results are written to the
   `connectivity-test-results` container.
 
-- `include-ping-tests` If the ping tests are too slow, they can be omitted
-  by setting this leaf to false. The default is true.
+- `include-ping-tests` If the ping tests are too slow, they can be omitted by
+  setting this leaf to false. The default is true.
 
-**Note:** Re-running the test won't cause the `sr-migrate` service to automatically
-continue. It should be manually re-deployed if the test result has changed.
+**Note:** Re-running the test won't cause the `sr-migrate` service to
+automatically continue. It should be manually re-deployed if the test result
+has changed.

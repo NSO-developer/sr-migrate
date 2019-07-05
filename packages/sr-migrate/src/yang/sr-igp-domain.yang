@@ -41,7 +41,7 @@ submodule sr-igp-domain {
          configure the SRGB on each router";
       leaf lower-bound {
         type sid;
-        default 16001;
+        default 16000;
       }
 
       leaf upper-bound {
