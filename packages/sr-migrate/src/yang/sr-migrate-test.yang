@@ -104,7 +104,7 @@ submodule sr-migrate-test {
 
         leaf prefix {
           tailf:info "Loopback interface prefix";
-          type inet:ipv4-address;
+          type inet:ip-address-no-zone;
         }
 
         leaf prefix-sid {

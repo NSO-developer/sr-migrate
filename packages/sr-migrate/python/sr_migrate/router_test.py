@@ -12,31 +12,11 @@ def to_result(test):
         return 'PASS'
     return 'FAIL'
 
-def get_loopback_ip_address(device, loopback):
-    if device.device_type.ne_type == 'netconf':
-        return device.config.ifmgr_cfg__interface_configurations.\
-               interface_configuration['act', 'Loopback%d' % loopback].\
-               ipv4_network.addresses.primary.address
-
-    return device.config.cisco_ios_xr__interface.Loopback[loopback].\
-           ipv4.address.ip
-
 def get_host_name(device):
     if device.device_type.ne_type == 'netconf':
         return device.config.shellutil_cfg__host_names.host_name
 
     return device.config.cisco_ios_xr__hostname
-
-def get_prefix_sid(device, instance, loopback):
-    if device.device_type.ne_type == 'netconf':
-        return device.config.clns_isis_cfg__isis.instances.instance[instance].\
-               interfaces.interface['Loopback%d' % loopback].\
-               interface_afs.interface_af['ipv4', 'unicast'].\
-               interface_af_data.prefix_sid.value
-
-    return device.config.cisco_ios_xr__router.isis.tag[instance].\
-           interface['Loopback%d' % loopback].\
-           address_family.ipv4.unicast.prefix_sid.absolute
 
 def continue_on_error(test_name):
     def decorator(function):
@@ -65,7 +45,8 @@ class RouterTest(object):
         self.options = options
 
         igp_domain = ncs.maagic.cd(router, '..')
-        self.igp_domain = (igp_domain.name, igp_domain.loopback)
+        self.igp_domain = (igp_domain.name, igp_domain.loopback,
+                           igp_domain.address_family)
 
         self.routers_and_plans = dict(
             (router.name, self.setup_plan(result, router))
@@ -73,6 +54,49 @@ class RouterTest(object):
 
         self.result_path = result.router.create(router.name)._path
         self.current_destination = None
+
+    def get_loopback_ip_address(self, device):
+        (__, loopback, address_family) = self.igp_domain
+        if device.device_type.ne_type == 'netconf':
+            interface = device.config.ifmgr_cfg__interface_configurations.\
+                   interface_configuration['act', 'Loopback%d' % loopback]
+
+            if address_family == 'ipv4':
+                return interface.ipv4_network.addresses.primary.address
+
+            try:
+                return next(iter(interface.ipv6_network.addresses.
+                                 regular_addresses.regular_address)).address
+            except StopIteration:
+                raise AttributeError(
+                    'No IPV6 loopback regular address configured on ',
+                    'NETCONF device %s' % device.name)
+
+        interface = device.config.cisco_ios_xr__interface.Loopback[loopback]
+        if address_family == 'ipv4':
+            return interface.ipv4.address.ip
+
+        try:
+            return next(iter(interface.ipv6.address.prefix_list)).prefix
+        except StopIteration:
+            raise AttributeError('No IPV6 loopback address prefix ',
+                                 'configured on CLI device %s' % device.name)
+
+    def get_prefix_sid(self, device):
+        (instance, loopback, address_family) = self.igp_domain
+        if device.device_type.ne_type == 'netconf':
+            return device.config.clns_isis_cfg__isis.\
+                   instances.instance[instance].\
+                   interfaces.interface['Loopback%d' % loopback].\
+                   interface_afs.interface_af[address_family, 'unicast'].\
+                   interface_af_data.prefix_sid.value
+
+        interface = device.config.cisco_ios_xr__router.isis.tag[instance].\
+                    interface['Loopback%d' % loopback]
+
+        return interface.address_family.ipv4.unicast.prefix_sid.absolute if (
+            address_family == 'ipv4') else (
+                interface.address_family.ipv6.unicast.prefix_sid.absolute)
 
     def setup_plan(self, result, router):
         test_plan = PlanComponent(
@@ -99,7 +123,7 @@ class RouterTest(object):
                 result = None
                 router_test = False
 
-                (isis_instance, __) = self.igp_domain
+                (isis_instance, __, __) = self.igp_domain
                 try:
                     neighbours = self.device_exec.\
                                  get_isis_neighbors(isis_instance)
@@ -147,14 +171,14 @@ class RouterTest(object):
             finally:
                 th.apply()
 
+    @continue_on_error('destination')
     def destination_test(self, device, neighbors):
         self.current_destination = device.name
         plan_path = self.routers_and_plans[device.name]
-        (instance, loopback) = self.igp_domain
 
         system_id = get_host_name(device)
-        prefix_sid = str(get_prefix_sid(device, instance, loopback))
-        address = get_loopback_ip_address(device, loopback)
+        prefix_sid = str(self.get_prefix_sid(device))
+        address = self.get_loopback_ip_address(device)
 
         with self.write_result() as result:
             result.system_id = system_id

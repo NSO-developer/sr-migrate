@@ -101,20 +101,27 @@
             <tag>
               <name>{../name}</name>
               <address-family>
-                <ipv4>
+                <ipv4 when="{address-family = 'ipv4'}">
                   <unicast>
                     <segment-routing>
                       <mpls/>
                     </segment-routing>
                   </unicast>
                 </ipv4>
+                <ipv6 when="{address-family = 'ipv6'}">
+                  <unicast>
+                    <segment-routing>
+                      <mpls/>
+                    </segment-routing>
+                  </unicast>
+                </ipv6>
               </address-family>
               <interface>
                 <name>Loopback{loopback}</name>
                 <interface-type>passive</interface-type>
                 <circuit-type>level-2-only</circuit-type>
                 <address-family>
-                  <ipv4>
+                  <ipv4 when="{address-family = 'ipv4'}">
                     <unicast>
                       <prefix-sid>
                         <?switch-context router?>
@@ -122,6 +129,14 @@
                       </prefix-sid>
                     </unicast>
                   </ipv4>
+                  <ipv6 when="{address-family = 'ipv6'}">
+                    <unicast>
+                      <prefix-sid>
+                        <?switch-context router?>
+                        <absolute>{prefix-sid}</absolute>
+                      </prefix-sid>
+                    </unicast>
+                  </ipv6>
                 </address-family>
               </interface>
 
@@ -132,10 +147,11 @@
                                     /interface[not(starts-with(
                                       name, 'Loopback'))]}">
                 <name>{name}</name>
+                <?switch-context router?>
                 <circuit-type>level-2-only</circuit-type>
                 <point-to-point/>
                 <address-family>
-                  <ipv4>
+                  <ipv4 when="{../address-family = 'ipv4'}">
                     <unicast>
                       <metric>1</metric>
                       <fast-reroute>
@@ -148,6 +164,18 @@
                       </fast-reroute>
                     </unicast>
                   </ipv4>
+                  <ipv6 when="{../address-family = 'ipv6'}">
+                    <unicast>
+                      <fast-reroute>
+                        <enable>
+                          <per-prefix/>
+                        </enable>
+                        <per-prefix>
+                          <ti-lfa/>
+                        </per-prefix>
+                      </fast-reroute>
+                    </unicast>
+                  </ipv6>
                 </address-family>
               </interface>
 
