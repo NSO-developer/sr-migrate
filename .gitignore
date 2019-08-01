@@ -1,9 +1,11 @@
-storedstate
-ncs-cdb
-ncs.conf
+/README.ncs
+/logs
+/ncs-cdb
+/ncs.conf
+/packages/cisco-iosxr-cli
+/state
+/storedstate
 netsim
-README.ncs
-packages/cisco-iosxr-cli
 load-dir
 shared-jar
 build

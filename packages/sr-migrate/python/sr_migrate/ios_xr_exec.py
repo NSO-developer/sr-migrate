@@ -89,14 +89,18 @@ IS-IS \S* Level-2 adjacencies:\r\n(.*)^\r\nTotal adjacency count: \d+.*',
                  adjacency['Interface'])
                 for table_string in table_strings
                 for adjacency in parse_table(table_string, headers,
-                                             detailed_headers)]
+                                             detailed_headers)
+                if ('Adjacency SID' in adjacency and
+                    'Non-FRR Adjacency SID' in adjacency)]
 
     def get_mpls_forwarding_labels(self, label):
         headers = ['Local Label', 'Outgoing Label', 'Prefix or ID',
                    'Outgoing Interface', 'Next Hop', 'Bytes Switched']
         result = self._exec('show mpls forwarding labels %s' % label)
-        table_string = self.MPLS_LABEL_TABLE_PATTERN.match(result).group(1)
-        return parse_table(table_string, headers)
+        table_string = self.MPLS_LABEL_TABLE_PATTERN.match(result)
+        if table_string:
+            return parse_table(table_string.group(1), headers)
+        return []
 
     def check_sid_labels(self, sid, number_of_params,
                          primary_check_fn, addn_check_fn=None):
